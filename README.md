@@ -61,6 +61,8 @@ caipo_backend/
 │   └── ...
 ├── .env                      # environment variables (NEVER commit this)
 ├── .gitignore                # To ignore files like .env, data/, __pycache__/
+├── LICENSE                
+├── README.md
 └── requirements.txt          # List of project dependencies
 ```
 
