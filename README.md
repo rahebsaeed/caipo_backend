@@ -1,8 +1,3 @@
-### **Updated `README.md` for v0.1**
-
-Copy and paste this entire block to replace the content of your `README.md` file.
-
-```markdown
 # CAIPO Backend - v0.1 Prototype
 
 [![Python Version](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
