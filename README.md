@@ -83,7 +83,7 @@ Follow these instructions to get the project running on your local machine.
 ### 2. Clone the Repository
 
 ```bash
-git clone <your-repo-url>
+git clone <repo-url>
 cd caipo_backend
 ```
 
@@ -107,15 +107,8 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 5. Configure Environment Variables
 
-Create a `.env` file in the project root by copying the example file. The defaults are sufficient to run the application.
-
-```bash
-cp .env.example .env
-```
-
-### 6. Run the Application
+### 5. Run the Application
 
 Start the development server. The server will create the `caipo_prototype.db` file on its first run.
 
