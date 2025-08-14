@@ -1,29 +1,34 @@
+### **Updated `README.md` for v0.1**
+
+Copy and paste this entire block to replace the content of your `README.md` file.
+
+```markdown
 # CAIPO Backend - v0.1 Prototype
 
 [![Python Version](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![Framework](https://img.shields.io/badge/FastAPI-0.104.0-green.svg)](https://fastapi.tiangolo.com/)
+[![Framework](https://img.shields.io/badge/FastAPI-0.115.6-green.svg)](https://fastapi.tiangolo.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-This repository contains the backend server for the CAIPO (Capture and AI Processed Output) prototype. It's designed to be a lightweight, robust, and scalable service for handling media uploads, processing them with AI models, and serving the results.
+This repository contains the backend server for the CAIPO (Capture and AI Processed Output) prototype. It's a robust and scalable service for handling media uploads, processing them asynchronously, and serving the results.
 
 > **Sprint Goal:** End-to-end: ESP32 (or sim) → audio/video → backend → batch Whisper transcript → embeddings search → tiny viewer. Quickstart ≤15 min.
 
 ## ✨ Key Features
 
-*   **FastAPI Core:** Built on a modern, high-performance Python web framework.
-*   **Automatic Docs:** Interactive API documentation (Swagger UI & ReDoc) available out-of-the-box.
-*   **Media Uploads:** Endpoints for uploading audio and video files.
-*   **Background Processing:** Heavy tasks like AI transcription are run as background jobs to ensure fast API response times.
-*   **AI Integration:** A service-oriented architecture for integrating a Whisper transcription model.
-*   **Configuration-driven:** Uses environment variables for easy configuration in different environments.
+*   **Asynchronous Processing:** Heavy tasks like AI transcription are run as background jobs, ensuring fast API response times (≤100ms) and preventing HTTP timeouts.
+*   **Audio & Video Ingestion:** Endpoints to upload both audio and video files. Video files automatically have their audio extracted for processing.
+*   **Job Status Tracking:** A dedicated `/status` endpoint allows clients to poll for the status of a processing job (`processing`, `completed`, `failed`).
+*   **AI Integration:** A service-oriented architecture integrates OpenAI's Whisper for high-quality transcription.
+*   **Observability:** Built-in middleware logs every request with a unique ID and processing latency for easy debugging.
+*   **Automatic Docs:** Interactive API documentation (Swagger UI) is available out-of-the-box for easy testing and exploration.
 
 ## 🛠️ Technology Stack
 
 *   **Framework:** [FastAPI](https://fastapi.tiangolo.com/)
 *   **Server:** [Uvicorn](https://www.uvicorn.org/)
-*   **Data Validation:** [Pydantic](https://docs.pydantic.dev/)
+*   **Database:** [SQLModel](https://sqlmodel.tiangolo.com/) on [SQLite](https://www.sqlite.org/index.html)
 *   **AI Model:** [OpenAI Whisper](https://github.com/openai/whisper)
-*   **Database (Planned):** [SQLAlchemy](https://www.sqlalchemy.org/) / [SQLModel](https://sqlmodel.tiangolo.com/)
+*   **Media Processing:** [FFmpeg](https://ffmpeg.org/) (via `ffmpeg-python`)
 
 ## 📂 Project Structure
 
@@ -36,6 +41,7 @@ caipo_backend/
 │   │   └── v1/               # Good practice to version your API
 │   │       ├── endpoints/
 │   │       │   ├── health.py # For the /healthz endpoint
+│   │       │   ├── status.py   # Handles polling for job status and results
 │   │       │   └── upload.py # For /upload/audio and /upload/video
 │   │       ├── __init__.py
 │   │       └── api.py        # Gathers all v1 routers
@@ -44,12 +50,14 @@ caipo_backend/
 │   │   └── __init__.py
 │   ├── db/                   # Database interaction logic
 │   │   ├── database.py       # DB Session and engine setup
-│   │   └── models.py         # SQLAlchemy/SQLModel database table models
+│   │   └── models.py         # SQLModel database table models
 │   ├── models/               # Pydantic models for request/response validation
-│   │   ├── media.py          # Schemas for media files
+│   │   ├── media.py          # Schemas for media file uploads
+│   │   ├── status.py         # Pydantic schemas for the status response
 │   │   └── __init__.py
 │   ├── services/             # Business logic layer
 │   │   ├── transcription.py  # Logic for calling Whisper
+│   │   ├── video_processing.py # Logic for extracting audio from video
 │   │   └── __init__.py
 │   ├── __init__.py
 │   └── main.py               # Main application entrypoint
@@ -57,12 +65,13 @@ caipo_backend/
 │   ├── audio/
 │   ├── transcripts/
 │   └── video/
-├── tests/                    # future tests will go here
+├── tests/                    # Future tests will go here
 │   └── ...
-├── .env                      # environment variables (NEVER commit this)
+├── .env                      # Environment variables 
 ├── .gitignore                # To ignore files like .env, data/, __pycache__/
 ├── LICENSE                
 ├── README.md
+├── caipo_prototype.db        # The SQLite database file
 └── requirements.txt          # List of project dependencies
 ```
 
@@ -74,17 +83,16 @@ Follow these instructions to get the project running on your local machine.
 
 *   Python 3.9+
 *   `git`
+*   **FFmpeg:** This is a system-level dependency required for video processing. You must install it and ensure it's available in your system's PATH. Download it from [ffmpeg.org](https://ffmpeg.org/download.html).
 
 ### 2. Clone the Repository
 
 ```bash
-git clone <repo-url>
+git clone <your-repo-url>
 cd caipo_backend
 ```
 
 ### 3. Set Up a Virtual Environment
-
-It's highly recommended to use a virtual environment to manage dependencies.
 
 **On macOS / Linux:**
 ```bash
@@ -103,80 +111,48 @@ venv\Scripts\activate
 ```bash
 pip install -r requirements.txt
 ```
-This will install FastAPI, Uvicorn, Whisper, and other necessary packages.
 
 ### 5. Configure Environment Variables
 
-Create a `.env` file in the project root by copying the example file.
+Create a `.env` file in the project root by copying the example file. The defaults are sufficient to run the application.
 
 ```bash
 cp .env.example .env
 ```
 
-The `.env` file is where you'll store secret keys and environment-specific settings. For now, the defaults in `.env.example` are sufficient to run the application.
-
-`.env.example`:
-```
-# Application Settings
-APP_NAME="CAIPO Backend API"
-API_V1_STR="/api/v1"
-```
-
 ### 6. Run the Application
 
-Now, start the development server.
+Start the development server. The server will create the `caipo_prototype.db` file on its first run.
 
 ```bash
 uvicorn app.main:app --reload
 ```
-*   `uvicorn`: The ASGI server that runs your application.
-*   `app.main:app`: Tells Uvicorn where to find the FastAPI instance (the `app` object in the `app/main.py` file).
-*   `--reload`: Automatically restarts the server whenever you make changes to the code.
-
 The server will be running at `http://127.0.0.1:8000`.
 
-## 📝 Using the API
+## 📝 API Usage and Workflow
 
-Once the server is running, you can interact with the API.
+The API uses an asynchronous workflow for all media processing.
+
+**Workflow:**
+1.  **`POST`** a media file to an `/upload` endpoint. The server responds immediately with a `file_id`.
+2.  **`GET`** the `/status/{file_id}` endpoint to check the progress of the job.
+3.  Once the status is `completed`, the response will contain the full transcript.
 
 ### Interactive API Docs (Recommended)
 
-The easiest way to explore and test the endpoints is by using the automatically generated Swagger UI.
-
-Navigate to **`http://127.0.0.1:8000/docs`** in your browser.
-
-You will see a full, interactive API documentation page where you can test endpoints, see models, and view responses directly.
+The easiest way to test is using the auto-generated Swagger UI. Navigate to **`http://127.0.0.1:8000/docs`** in your browser.
 
 ### `curl` Examples
 
-You can also use a command-line tool like `curl` to interact with the API.
+#### 1. Upload a Media File
 
-#### Health Check
-
-Verify that the service is running.
-
-```bash
-curl -X GET http://127.0.0.1:8000/api/v1/healthz
-```
-
-**Expected Response:**
-```json
-{
-  "status": "ok"
-}
-```
-
-#### Upload an Audio File
-
-Send a `POST` request with a multipart form to the `/upload/audio` endpoint.
+This example uploads an audio file. The process for video is identical, just use the `/upload/video` endpoint.
 
 ```bash
 curl -X POST -F "file=@/path/to/your/audio.mp3" http://127.0.0.1:8000/api/v1/upload/audio
 ```
-*Replace `/path/to/your/audio.mp3` with the actual path to an audio file on your machine.*
 
-**Expected Response:**
-The API will respond immediately with a file ID, and the transcription will start in the background.
+**Expected Immediate Response:**
 ```json
 {
   "status": "success",
@@ -184,7 +160,114 @@ The API will respond immediately with a file ID, and the transcription will star
   "filename": "audio.mp3"
 }
 ```
+**Save the `file_id` from the response.**
 
-After the request, you can check your local file system:
-*   The uploaded audio will be in `data/audio/<file_id>.<ext>`.
-*   Once transcription is complete, the transcript will be saved in `data/transcripts/<file_id>.json`.
+#### 2. Check Job Status
+
+Use the `file_id` you received to poll the status endpoint.
+
+```bash
+curl http://127.0.0.1:8000/api/v1/status/a1b2c3d4-e5f6-7890-abcd-ef1234567890
+```
+
+**Response while processing:**
+```json
+{
+  "file_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "processing",
+  "message": "File is currently being processed.",
+  "transcript_text": null,
+  "segments": null
+}
+```
+
+**Response when completed:**
+```json
+{
+  "file_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "completed",
+  "message": "Processing completed successfully.",
+  "transcript_text": "The quick brown fox jumps over the lazy dog.",
+  "segments": [
+    {
+      "id": 0,
+      "start": 0.0,
+      "end": 4.1,
+      "text": " The quick brown fox jumps over the lazy dog."
+    }
+  ]
+}
+```
+
+#### 3. Health Check
+
+Verify that the service is running.
+
+```bash
+curl -X GET http://127.0.0.1:8000/api/v1/healthz
+```
+**Expected Response:** `{"status": "ok"}`
+
+## ✅ Verifying Database Operations
+
+Since the API uses background processing, the database is the "single source of truth" for the status of any job. Here’s how you can directly inspect the SQLite database to verify that data is being saved and updated correctly. This is the definitive way to confirm the acceptance criteria: `file exists on disk + DB row`.
+
+**Prerequisite:** The `sqlite3` command-line tool. This is typically included with standard Python installations.
+
+### Step-by-Step Guide
+
+1.  **Navigate to the Project Root**
+
+    Make sure your terminal is in the `caipo_backend/` directory, where the `caipo_prototype.db` file is located.
+
+2.  **Open the Database File**
+
+    Run the following command to start the SQLite interactive shell and open the database file:
+    ```bash
+    sqlite3 caipo_prototype.db
+    ```
+    Your command prompt will change to `sqlite>`.
+
+3.  **Format the Output (Recommended)**
+
+    To make the query results readable, run these two commands inside the SQLite shell:
+    ```sqlite
+    .headers on
+    .mode column
+    ```
+
+4.  **Query the Data**
+
+    Now, you can run SQL queries. To see the most important fields for all the files you've uploaded, run:
+    ```sqlite
+    SELECT id, file_id, filename, status, transcript_path FROM mediafile;
+    ```
+    or to show all columns of table,
+    run:
+    ```sqlite
+    SELECT * FROM mediafile;
+    ```    
+5.  **Analyze the Results**
+
+    **Immediately after uploading a new file**, the output will show the record in its initial `uploaded` or `processing` state:
+    ```
+    id  file_id                               filename   status      transcript_path
+    --  ------------------------------------  ---------  ----------  ---------------
+    1   a1b2c3d4-e5f6-7890-abcd-ef1234567890  audio.wav  processing
+    ```
+
+    **After the background job is complete**, run the same `SELECT` command again. You will see the record has been updated. Notice the `status` is now `completed` and the `transcript_path` is filled in:
+    ```
+    id  file_id                               filename   status     transcript_path
+    --  ------------------------------------  ---------  ---------  -------------------------------------------
+    1   a1b2c3d4-e5f6-7890-abcd-ef1234567890  audio.wav  completed  data/transcripts/a1b2c3d4-....json
+    ```
+
+6.  **Exit the SQLite Shell**
+
+    When you are finished, you can exit the tool by typing:
+    ```sqlite
+    .exit
+    ```
+
+This direct inspection is the fastest way to confirm your acceptance criteria and debug any issues with data persistence or background job updates.
